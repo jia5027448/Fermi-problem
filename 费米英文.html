@@ -1,0 +1,2271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fermi Explorer | Shenzhen Metro Challenge</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+    
+    <!-- Configure Tailwind custom colors and fonts -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#165DFF',      // Main color: deep blue
+                        secondary: '#FF7D00',    // Secondary color: orange
+                        accent: '#00B42A',       // Success color: green
+                        danger: '#F53F3F',       // Error color: red
+                        dark: '#1D2129',
+                        light: '#F2F3F5'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .text-shadow {
+                text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            }
+            .card-hover {
+                @apply hover:shadow-lg hover:-translate-y-1 transition-all duration-300 cursor-pointer;
+            }
+            .selected {
+                @apply border-2 border-accent bg-green-50;
+            }
+            .game-container {
+                @apply max-w-5xl mx-auto bg-white rounded-xl shadow-xl overflow-hidden;
+            }
+            .game-header {
+                @apply bg-primary text-white p-4 flex justify-between items-center;
+            }
+            .game-stage {
+                @apply p-6 transition-opacity duration-500;
+            }
+            .progress-bar {
+                @apply h-3 bg-gray-200 rounded-full overflow-hidden;
+            }
+            .progress-fill {
+                @apply h-full bg-accent transition-all duration-500;
+            }
+            .fade-in {
+                animation: fadeIn 0.5s ease-in-out;
+            }
+            @keyframes fadeIn {
+                from { opacity: 0; transform: translateY(10px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+            .badge {
+                @apply inline-block px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800 mr-2 mb-2;
+            }
+            .step-highlight {
+                @apply bg-blue-50 border-l-4 border-primary;
+            }
+            .question-card {
+                @apply border rounded-lg p-3 mb-3 cursor-pointer transition-all;
+            }
+            .question-card:hover {
+                @apply bg-blue-50;
+            }
+            .question-card.selected {
+                @apply bg-blue-100 border-primary;
+            }
+            .question-card.disabled {
+                @apply opacity-50 cursor-not-allowed hover:bg-white;
+            }
+            .tooltip {
+                @apply invisible absolute bg-dark text-white text-xs rounded py-1 px-2 -mt-10 ml-2 opacity-0 transition-opacity duration-300 w-48 z-10;
+            }
+            .has-tooltip:hover .tooltip {
+                @apply visible opacity-100;
+            }
+            .help-icon {
+                @apply text-primary cursor-help ml-1;
+            }
+            .factor-card {
+                @apply border rounded-lg p-4 card-hover;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans text-dark min-h-screen">
+    <!-- Game container -->
+    <div class="game-container my-6 md:my-10">
+        <!-- Game header -->
+        <header class="game-header">
+            <div class="flex items-center">
+                <i class="fa fa-compass text-2xl mr-3"></i>
+                <h1 class="text-xl md:text-2xl font-bold">Fermi Explorer</h1>
+            </div>
+            <div class="flex items-center">
+                <div class="mr-4">
+                    <div class="text-sm mb-1">Progress</div>
+                    <div class="progress-bar w-32">
+                        <div id="progressFill" class="progress-fill" style="width: 0%"></div>
+                    </div>
+                </div>
+                <div class="relative has-tooltip">
+                    <i class="fa fa-lightbulb-o text-yellow-300 text-2xl"></i>
+                    <span class="tooltip">
+                        Fermi Score: Based on your problem decomposition, model completeness and estimation accuracy
+                    </span>
+                    <span id="score" class="ml-1 font-bold">0</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Game content area -->
+        <main>
+            <!-- Start screen -->
+            <section id="startStage" class="game-stage text-center">
+                <div class="max-w-2xl mx-auto">
+                    <div class="mb-6">
+                        <img src="https://images.unsplash.com/photo-1583768226880-6d1d7f0e0a5c?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1200&h=400&q=80" alt="Shenzhen Metro Map" class="w-full h-48 md:h-64 object-cover rounded-lg shadow-md">
+                    </div>
+                    <h2 class="text-2xl md:text-3xl font-bold mb-4 text-primary">Shenzhen Metro Passenger Flow Challenge</h2>
+                    <p class="text-gray-700 mb-6">As a Fermi explorer, your mission is to estimate the daily passenger flow of Shenzhen Metro by collecting key information and building an estimation model.</p>
+                    
+                    <!-- Data visualization: Metro passenger flow trend -->
+                    <div class="bg-white p-4 rounded-lg shadow-sm mb-6">
+                        <h3 class="text-sm font-medium text-gray-600 mb-2">Shenzhen Metro Passenger Flow Trend</h3>
+                        <div class="h-40">
+                            <canvas id="ridershipTrend"></canvas>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-blue-50 border-l-4 border-primary p-4 rounded-r mb-8">
+                        <p class="text-gray-700">
+                            <i class="fa fa-lightbulb-o text-secondary mr-2"></i>
+                            Core of Fermi Estimation: Break down complex problems into smaller ones and derive answers through reasonable assumptions
+                        </p>
+                    </div>
+                    
+                    <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                        <button id="tutorialBtn" class="bg-gray-200 hover:bg-gray-300 text-dark font-bold py-3 px-6 rounded-lg transition-all">
+                            <i class="fa fa-book mr-2"></i> Game Tutorial
+                        </button>
+                        <button id="startBtn" class="bg-secondary hover:bg-secondary/90 text-white font-bold py-3 px-8 rounded-lg transition-all transform hover:-translate-y-1 shadow-md">
+                            Start Exploration <i class="fa fa-arrow-right ml-2"></i>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tutorial modal -->
+            <div id="tutorialModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden">
+                <div class="bg-white rounded-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto m-4">
+                    <div class="p-5 border-b flex justify-between items-center">
+                        <h3 class="text-xl font-bold text-primary">Fermi Estimation Game Tutorial</h3>
+                        <button id="closeTutorial" class="text-gray-500 hover:text-gray-700">
+                            <i class="fa fa-times text-xl"></i>
+                        </button>
+                    </div>
+                    <div class="p-5 space-y-4">
+                        <div>
+                            <h4 class="font-bold text-lg mb-2">What is Fermi Estimation?</h4>
+                            <p class="text-gray-700">Fermi estimation is a method to solve complex problems by breaking them down into smaller, estimable questions, then deriving answers through reasonable assumptions, proposed by physicist Enrico Fermi.</p>
+                        </div>
+                        
+                        <div>
+                            <h4 class="font-bold text-lg mb-2">Game Flow</h4>
+                            <ol class="list-decimal pl-5 space-y-2 text-gray-700">
+                                <li><span class="font-medium">Problem Decomposition</span>: Select 8 sub-questions that help solve the core problem</li>
+                                <li><span class="font-medium">Key Factors</span>: Choose key factors affecting passenger flow</li>
+                                <li><span class="font-medium">Basic Data</span>: Review relevant public data</li>
+                                <li><span class="font-medium">Set Assumptions</span>: Set reasonable assumptions based on data</li>
+                                <li><span class="font-medium">Build Model</span>: Design calculation steps and formulas</li>
+                                <li><span class="font-medium">Result Analysis</span>: View your estimation results and feedback</li>
+                            </ol>
+                        </div>
+                        
+                        <div>
+                            <h4 class="font-bold text-lg mb-2">How to Get High Scores?</h4>
+                            <ul class="list-disc pl-5 space-y-1 text-gray-700">
+                                <li>Choose questions covering both demand and supply sides</li>
+                                <li>Include key factors like population size, train capacity</li>
+                                <li>Set reasonable and evidence-based assumptions</li>
+                                <li>Build a complete calculation model</li>
+                                <li>Make estimation results close to actual data</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="p-4 bg-gray-50 rounded-b-xl text-center">
+                        <button id="startFromTutorial" class="bg-primary hover:bg-primary/90 text-white font-bold py-2 px-6 rounded-lg transition-all">
+                            Start Game
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 1: Problem Decomposition -->
+            <section id="decomposeStage" class="game-stage hidden">
+                <div class="flex items-center mb-6">
+                    <div class="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center mr-3">1</div>
+                    <h2 class="text-2xl font-bold text-primary">Step 1: Decompose the Problem</h2>
+                </div>
+                
+                <p class="text-gray-700 mb-6">Select <span class="text-accent font-bold">8 questions</span> from below that help solve "How many people take Shenzhen Metro daily?" (You can add your own questions):</p>
+                
+                <div class="bg-gray-50 p-5 rounded-lg mb-6">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="font-semibold">Question Bank (Select 8)</h3>
+                        <span id="questionCount" class="text-sm bg-gray-200 px-2 py-1 rounded">Selected: 0/8</span>
+                    </div>
+                    <div id="questionBank" class="space-y-2">
+                        <!-- Population & demand related questions -->
+                        <div class="question-card" data-question="population_total" data-factors="population">
+                            <label class="flex items-start cursor-pointer">
+                                <input type="checkbox" class="mt-1 mr-2">
+                                <span>What is the permanent and floating population of Shenzhen?</span>
+                                <i class="fa fa-question-circle help-icon has-tooltip">
+                                    <span class="tooltip">Population size determines the potential user base for the metro</span>
+                                </i>
+                            </label>
+                        </div>
+                        <div class="question-card" data-question="population_structure" data-factors="population">
+                            <label class="flex items-start cursor-pointer">
+                                <input type="checkbox" class="mt-1 mr-2">
+                                <span>What is the age and occupational structure of Shenzhen's population?</span>
+                                <i class="fa fa-question-circle help-icon has-tooltip">
+                                    <span class="tooltip">Different groups have significantly different travel needs and patterns</span>
+                                </i>
+                            </label>
+                        </div>
+                        <div class="question-card" data-question="residential_distribution" data-factors="distribution">
+                            <label class="flex items-start cursor-pointer">
+                                <input type="checkbox" class="mt-1 mr-2">
+                                <span>How is the residential population distributed in Shenzhen?</span>
+                                <i class="fa fa-question-circle help-icon has-tooltip">
+                                    <span class="tooltip">Match between residential areas and metro lines affects usage rate</span>
+                                </i>
+                            </label>
+                        </div>
+                        <div class="question-card" data-question="employment_distribution" data-factors="distribution">
+                            <label class="flex items-start cursor-pointer">
+                                <input type="checkbox" class="mt-1 mr-2">
+                                <span>How are employment areas distributed in Shenzhen?</span>
+                                <i class="fa fa-question-circle help-icon has-tooltip">
+                                    <span class="tooltip">Employment centers are main sources of commuting passengers</span>
+                                </i>
+                            </label>
+                        </div>
+                        <div class="question-card" data-question="transit_ratio" data-factors="alternatives">
+                            <label class="flex items-start cursor-pointer">
+                                <input type="checkbox" class="mt-1 mr-2">
+                                <span>What percentage of people use public transportation?</span>
+                                <i class="fa fa-question-circle help-icon has-tooltip">
+                                    <span class="tooltip">Reflects the share of public transport in overall travel modes</span>
+                                </i>
+                            </label>
+                        </div>
+                        
+                        <!-- Metro system related questions -->
+                        <div class="question-card" data-question="subway_lines" data-factors="lines">
+                            <label class="flex items-start cursor-pointer">
+                                <input type="checkbox" class="mt-1 mr-2">
+                                <span>How many operational metro lines and stations are there in Shenzhen?</span>
+                                <i class="fa fa-question-circle help-icon has-tooltip">
+                                    <span class="tooltip">Line network coverage determines service capacity</span>
+                                </i>
+                            </label>
+                        </div>
+                        <div class="question-card" data-question="operating_hours" data-factors="hours">
+                            <label class="flex items-start cursor-pointer">
+                                <input type="checkbox" class="mt-1 mr-2">
+                                <span>How long does the metro operate daily?</span>
+                                <i class="fa fa-question-circle help-icon has-tooltip">
+                                    <span class="tooltip">Operating hours directly affect daily passenger flow limit</span>
+                                </i>
+                            </label>
+                        </div>
+                        <div class="question-card" data-question="train_frequency" data-factors="frequency">
+                            <label class="flex items-start cursor-pointer">
+                                <input type="checkbox" class="mt-1 mr-2">
+                                <span>What is the train frequency (peak/off-peak)?</span>
+                                <i class="fa fa-question-circle help-icon has-tooltip">
+                                    <span class="tooltip">Train frequency determines capacity per unit time</span>
+                                </i>
+                            </label>
+                        </div>
+                        <div class="question-card" data-question="peak_hours" data-factors="peak">
+                            <label class="flex items-start cursor-pointer">
+                                <input type="checkbox" class="mt-1 mr-2">
+                                <span>How long do morning and evening peak hours last?</span>
+                                <i class="fa fa-question-circle help-icon has-tooltip">
+                                    <span class="tooltip">Peak hours have the highest passenger flow</span>
+                                </i>
+                            </label>
+                        </div>
+                        <div class="question-card" data-question="carriage_capacity" data-factors="capacity">
+                            <label class="flex items-start cursor-pointer">
+                                <input type="checkbox" class="mt-1 mr-2">
+                                <span>How many carriages per train on average? What's the capacity per carriage?</span>
+                                <i class="fa fa-question-circle help-icon has-tooltip">
+                                    <span class="tooltip">Determines the maximum number of passengers per train</span>
+                                </i>
+                            </label>
+                        </div>
+                        <div class="question-card" data-question="transfer_stations" data-factors="transfer">
+                            <label class="flex items-start cursor-pointer">
+                                <input type="checkbox" class="mt-1 mr-2">
+                                <span>How many transfer stations are there? What percentage of passengers transfer?</span>
+                                <i class="fa fa-question-circle help-icon has-tooltip">
+                                    <span class="tooltip">Transfer passengers are counted multiple times and need adjustment</span>
+                                </i>
+                            </label>
+                        </div>
+                        <div class="question-card" data-question="coverage_area" data-factors="coverage">
+                            <label class="flex items-start cursor-pointer">
+                                <input type="checkbox" class="mt-1 mr-2">
+                                <span>What percentage of the city area does Shenzhen Metro cover?</span>
+                                <i class="fa fa-question-circle help-icon has-tooltip">
+                                    <span class="tooltip">Coverage directly affects accessibility and usage rate</span>
+                                </i>
+                            </label>
+                        </div>
+                        <div class="question-card" data-question="average_distance" data-factors="distance">
+                            <label class="flex items-start cursor-pointer">
+                                <input type="checkbox" class="mt-1 mr-2">
+                                <span>What is the average travel distance per passenger?</span>
+                                <i class="fa fa-question-circle help-icon has-tooltip">
+                                    <span class="tooltip">Affects train turnover efficiency and daily passenger capacity</span>
+                                </i>
+                            </label>
+                        </div>
+                        <div class="question-card" data-question="station_density" data-factors="density">
+                            <label class="flex items-start cursor-pointer">
+                                <input type="checkbox" class="mt-1 mr-2">
+                                <span>What is the average density of metro stations?</span>
+                                <i class="fa fa-question-circle help-icon has-tooltip">
+                                    <span class="tooltip">Station spacing affects walking accessibility and attractiveness</span>
+                                </i>
+                            </label>
+                        </div>
+                        
+                        <!-- Travel behavior related questions -->
+                        <div class="question-card" data-question="weekday_vs_weekend" data-factors="temporal">
+                            <label class="flex items-start cursor-pointer">
+                                <input type="checkbox" class="mt-1 mr-2">
+                                <span>How different is passenger flow between weekdays and weekends?</span>
+                                <i class="fa fa-question-circle help-icon has-tooltip">
+                                    <span class="tooltip">Weekday commuting and weekend leisure flows differ significantly</span>
+                                </i>
+                            </label>
+                        </div>
+                        <div class="question-card" data-question="daily_variation" data-factors="temporal">
+                            <label class="flex items-start cursor-pointer">
+                                <input type="checkbox" class="mt-1 mr-2">
+                                <span>What are the passenger flow patterns on different days of the week?</span>
+                                <i class="fa fa-question-circle help-icon has-tooltip">
+                                    <span class="tooltip">Monday-Friday patterns differ from holidays</span>
+                                </i>
+                            </label>
+                        </div>
+                        <div class="question-card" data-question="purpose_distribution" data-factors="purpose">
+                            <label class="flex items-start cursor-pointer">
+                                <input type="checkbox" class="mt-1 mr-2">
+                                <span>What is the distribution of travel purposes (commute, shopping, leisure, etc.)?</span>
+                                <i class="fa fa-question-circle help-icon has-tooltip">
+                                    <span class="tooltip">Different purposes have significant time and frequency differences</span>
+                                </i>
+                            </label>
+                        </div>
+                        <div class="question-card" data-question="fare_impact" data-factors="fare">
+                            <label class="flex items-start cursor-pointer">
+                                <input type="checkbox" class="mt-1 mr-2">
+                                <span>How do fare policies affect passenger flow?</span>
+                                <i class="fa fa-question-circle help-icon has-tooltip">
+                                    <span class="tooltip">Discount policies may increase usage rate</span>
+                                </i>
+                            </label>
+                        </div>
+                        
+                        <!-- Alternative transportation -->
+                        <div class="question-card" data-question="bus_connection" data-factors="connection">
+                            <label class="flex items-start cursor-pointer">
+                                <input type="checkbox" class="mt-1 mr-2">
+                                <span>What is the bus-metro transfer ratio?</span>
+                                <i class="fa fa-question-circle help-icon has-tooltip">
+                                    <span class="tooltip">Transfer convenience affects metro attractiveness</span>
+                                </i>
+                            </label>
+                        </div>
+                        <div class="question-card" data-question="private_car" data-factors="alternatives">
+                            <label class="flex items-start cursor-pointer">
+                                <input type="checkbox" class="mt-1 mr-2">
+                                <span>How many private cars are there in Shenzhen? What's their usage?</span>
+                                <i class="fa fa-question-circle help-icon has-tooltip">
+                                    <span class="tooltip">Private cars are a main competitor to metro</span>
+                                </i>
+                            </label>
+                        </div>
+                        <div class="question-card" data-question="ride_hailing" data-factors="alternatives">
+                            <label class="flex items-start cursor-pointer">
+                                <input type="checkbox" class="mt-1 mr-2">
+                                <span>How do ride-hailing services affect metro passenger flow?</span>
+                                <i class="fa fa-question-circle help-icon has-tooltip">
+                                    <span class="tooltip">Ride-hailing is an important alternative for short trips</span>
+                                </i>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mb-6">
+                    <label class="block text-gray-700 mb-2 font-medium">Add your own questions (optional)</label>
+                    <textarea id="customQuestions" rows="2" 
+                              class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                              placeholder="Example: How crowded is Shenzhen Metro during peak hours?..."></textarea>
+                </div>
+                
+                <div class="bg-blue-50 p-4 rounded-lg mb-6">
+                    <h3 class="font-semibold mb-2 text-primary">Selection Tips</h3>
+                    <div class="text-sm text-gray-700 space-y-2">
+                        <p><i class="fa fa-info-circle text-primary mr-1"></i> Try to cover different dimensions (population, metro system, travel behavior, etc.)</p>
+                        <p><i class="fa fa-lightbulb-o text-secondary mr-1"></i> Balance questions about "demand side" and "supply side"</p>
+                    </div>
+                </div>
+                
+                <div class="flex justify-between">
+                    <button id="decomposeBackBtn" class="bg-gray-200 hover:bg-gray-300 text-dark font-bold py-2 px-6 rounded-lg transition-all">
+                        <i class="fa fa-arrow-left mr-1"></i> Back
+                    </button>
+                    <button id="decomposeNextBtn" class="bg-primary hover:bg-primary/90 text-white font-bold py-2 px-6 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        Next <i class="fa fa-arrow-right ml-1"></i>
+                    </button>
+                </div>
+            </section>
+
+            <!-- Step 2: Key Influencing Factors -->
+            <section id="factorsStage" class="game-stage hidden">
+                <div class="flex items-center mb-6">
+                    <div class="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center mr-3">2</div>
+                    <h2 class="text-2xl font-bold text-primary">Step 2: Key Influencing Factors</h2>
+                </div>
+                
+                <p class="text-gray-700 mb-6">Based on your 8 selected questions, here are the relevant key influencing factors (select at least 5):</p>
+                
+                <div id="factorCount" class="text-sm bg-gray-100 px-3 py-1 rounded mb-4 inline-block">Selected: 0/12</div>
+                
+                <div id="relevantFactors" class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                    <!-- Factors will be dynamically generated based on selected questions -->
+                </div>
+                
+                <div class="bg-amber-50 border-l-4 border-amber-400 p-4 rounded-r mb-6">
+                    <p class="text-gray-700">
+                        <i class="fa fa-info-circle text-amber-600 mr-2"></i>
+                        These factors match your selected 8 questions, each corresponding to solving a sub-problem
+                    </p>
+                </div>
+                
+                <div class="flex justify-between">
+                    <button id="factorsBackBtn" class="bg-gray-200 hover:bg-gray-300 text-dark font-bold py-2 px-6 rounded-lg transition-all">
+                        <i class="fa fa-arrow-left mr-1"></i> Previous
+                    </button>
+                    <button id="factorsNextBtn" class="bg-primary hover:bg-primary/90 text-white font-bold py-2 px-6 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        Next <i class="fa fa-arrow-right ml-1"></i>
+                    </button>
+                </div>
+            </section>
+
+            <!-- Step 3: Get Data -->
+            <section id="dataStage" class="game-stage hidden">
+                <div class="flex items-center mb-6">
+                    <div class="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center mr-3">3</div>
+                    <h2 class="text-2xl font-bold text-primary">Step 3: Access Basic Data</h2>
+                </div>
+                
+                <p class="text-gray-700 mb-6">Based on your selected factors, here is some public basic data:</p>
+                
+                <div id="selectedData" class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                    <!-- Data will be dynamically generated based on selected factors -->
+                </div>
+                
+                <!-- Data visualization: Metro lines and stations -->
+                <div class="bg-white p-4 rounded-lg shadow-sm mb-6">
+                    <h3 class="text-sm font-medium text-gray-600 mb-2">Shenzhen Metro Network Development</h3>
+                    <div class="h-48">
+                        <canvas id="metroDevelopment"></canvas>
+                    </div>
+                </div>
+                
+                <div class="bg-blue-50 p-4 rounded-lg mb-6">
+                    <h3 class="font-semibold mb-2 text-primary">Data Analysis</h3>
+                    <p class="text-sm text-gray-700">
+                        <i class="fa fa-bar-chart text-primary mr-1"></i>
+                        This data comes from Shenzhen Metro official releases and statistical yearbooks
+                    </p>
+                </div>
+                
+                <div class="flex justify-between">
+                    <button id="dataBackBtn" class="bg-gray-200 hover:bg-gray-300 text-dark font-bold py-2 px-6 rounded-lg transition-all">
+                        <i class="fa fa-arrow-left mr-1"></i> Previous
+                    </button>
+                    <button id="dataNextBtn" class="bg-primary hover:bg-primary/90 text-white font-bold py-2 px-6 rounded-lg transition-all">
+                        Set Assumptions <i class="fa fa-arrow-right ml-1"></i>
+                    </button>
+                </div>
+            </section>
+
+            <!-- Step 4: Set Assumptions -->
+            <section id="assumptionsStage" class="game-stage hidden">
+                <div class="flex items-center mb-6">
+                    <div class="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center mr-3">4</div>
+                    <h2 class="text-2xl font-bold text-primary">Step 4: Set Your Assumptions</h2>
+                </div>
+                
+                <p class="text-gray-700 mb-6">Based on available data, set your reasonable assumptions (think about your reasoning):</p>
+                
+                <div id="assumptionsForm" class="space-y-6 mb-8">
+                    <!-- Assumption form will be dynamically generated based on selected factors -->
+                </div>
+                
+                <div class="bg-blue-50 p-4 rounded-lg mb-6">
+                    <h3 class="font-semibold mb-2 text-primary">Reasoning Area</h3>
+                    <p class="text-sm text-gray-600 mb-2">Record your reasoning for these assumptions:</p>
+                    <textarea rows="3" id="assumptionReasons" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                              placeholder="Example: I think 30% of people use public transport because Shenzhen has extensive bus/metro coverage, but there are also many private cars..."></textarea>
+                </div>
+                
+                <div class="flex justify-between">
+                    <button id="assumptionsBackBtn" class="bg-gray-200 hover:bg-gray-300 text-dark font-bold py-2 px-6 rounded-lg transition-all">
+                        <i class="fa fa-arrow-left mr-1"></i> Previous
+                    </button>
+                    <button id="assumptionsNextBtn" class="bg-primary hover:bg-primary/90 text-white font-bold py-2 px-6 rounded-lg transition-all">
+                        Build Calculation Model <i class="fa fa-arrow-right ml-1"></i>
+                    </button>
+                </div>
+            </section>
+
+            <!-- Step 5: Build Calculation Model -->
+            <section id="calculationStage" class="game-stage hidden">
+                <div class="flex items-center mb-6">
+                    <div class="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center mr-3">5</div>
+                    <h2 class="text-2xl font-bold text-primary">Step 5: Build Calculation Model</h2>
+                </div>
+                
+                <p class="text-gray-700 mb-6">Based on your 8 decomposed questions and assumptions, design calculation steps (what to calculate first, what next):</p>
+                
+                <div class="bg-gray-50 p-5 rounded-lg mb-6">
+                    <h3 class="font-semibold mb-3">Calculation Approach Example</h3>
+                    <ol class="list-decimal pl-5 text-gray-700 space-y-2">
+                        <li>First calculate the total population that might use metro</li>
+                        <li>Then calculate the total daily capacity of the metro system</li>
+                        <li>Adjust results based on peak/off-peak ratio and transfer rate</li>
+                        <li>Finally consider the impact of alternative transportation</li>
+                    </ol>
+                </div>
+                
+                <div class="mb-6">
+                    <div id="calculationBuilder" class="border border-dashed border-gray-300 rounded-lg p-4 mb-4 min-h-[150px]">
+                        <div class="text-center text-gray-400" id="builderPlaceholder">
+                            <i class="fa fa-plus-circle text-2xl mb-2"></i>
+                            <p>Click steps below to add to your calculation model</p>
+                        </div>
+                        <div id="customSteps" class="space-y-3">
+                            <!-- Custom calculation steps will appear here -->
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <h4 class="font-medium mb-3">Available Calculation Modules (click to add)</h4>
+                        <div id="availableSteps" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <!-- Available calculation steps will be dynamically generated -->
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bg-gray-50 p-4 rounded-lg mb-6">
+                    <h3 class="font-semibold mb-2">Your Calculation Formula</h3>
+                    <div id="formulaDisplay" class="text-lg font-mono text-primary min-h-[60px]">
+                        Select calculation modules below to build your formula...
+                    </div>
+                </div>
+                
+                <div class="flex justify-between">
+                    <button id="calculationBackBtn" class="bg-gray-200 hover:bg-gray-300 text-dark font-bold py-2 px-6 rounded-lg transition-all">
+                        <i class="fa fa-arrow-left mr-1"></i> Previous
+                    </button>
+                    <button id="calculateBtn" class="bg-secondary hover:bg-secondary/90 text-white font-bold py-2 px-6 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        Calculate Result <i class="fa fa-calculator ml-1"></i>
+                    </button>
+                </div>
+            </section>
+
+            <!-- Step 6: Results & Feedback -->
+            <section id="resultStage" class="game-stage hidden">
+                <div class="flex items-center mb-6 justify-center">
+                    <div class="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center mr-3">6</div>
+                    <h2 class="text-2xl font-bold text-primary">Your Exploration Results</h2>
+                </div>
+                
+                <div class="bg-white border rounded-xl shadow-md p-6 mb-8 text-center">
+                    <div class="text-5xl font-bold text-primary mb-4" id="finalResult">0</div>
+                    <p class="text-gray-600">Your Estimated Daily Shenzhen Metro Passenger Flow</p>
+                </div>
+                
+                <!-- Result comparison visualization -->
+                <div class="bg-white p-4 rounded-lg shadow-sm mb-8">
+                    <h3 class="text-sm font-medium text-gray-600 mb-2">Your Estimate vs Actual Data</h3>
+                    <div class="h-60">
+                        <canvas id="resultComparison"></canvas>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                    <div class="bg-gray-50 rounded-lg p-5">
+                        <h3 class="font-semibold mb-3 text-dark">Your Model Analysis</h3>
+                        <div id="modelAnalysis" class="text-gray-700 space-y-3">
+                            <!-- Analysis will be dynamically generated -->
+                        </div>
+                        <div id="errorAnalysis" class="mt-4 p-3 bg-red-50 border border-red-100 rounded-lg hidden">
+                            <h4 class="font-medium text-red-700 mb-2">Problem Analysis Reference</h4>
+                            <p class="text-sm text-red-600" id="errorAnalysisText">
+                                <!-- Error analysis will appear here -->
+                            </p>
+                        </div>
+                        <div class="mt-4">
+                            <div class="flex justify-between text-sm mb-1">
+                                <span>Model Completeness</span>
+                                <span id="completenessScore">0/10</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div id="completenessBar" class="progress-fill" style="width: 0%"></div>
+                            </div>
+                            
+                            <div class="flex justify-between text-sm mb-1 mt-3">
+                                <span>Logical Rationality</span>
+                                <span id="logicScore">0/10</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div id="logicBar" class="progress-fill" style="width: 0%"></div>
+                            </div>
+                            
+                            <div class="flex justify-between text-sm mb-1 mt-3">
+                                <span>Problem Decomposition Quality</span>
+                                <span id="decompositionScore">0/10</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div id="decompositionBar" class="progress-fill" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gray-50 rounded-lg p-5">
+                        <h3 class="font-semibold mb-3 text-dark">Actual Reference Data</h3>
+                        <p class="text-gray-700 mb-3">According to Shenzhen Metro official data, average daily passenger flow on weekdays is approximately:</p>
+                        <div class="text-2xl font-bold text-accent mb-4">2.1M - 2.3M passengers</div>
+                        <p class="text-sm text-gray-600 mb-4">
+                            Source: Shenzhen Metro Group annual reports and public statistics
+                        </p>
+                        <div class="space-y-2">
+                            <div class="bg-blue-50 p-3 rounded border border-blue-100">
+                                <p class="text-sm text-blue-800"><i class="fa fa-info-circle mr-1"></i> Highest daily flow in 2023 reached 2.84M (pre-Spring Festival peak)</p>
+                            </div>
+                            <div class="bg-green-50 p-3 rounded border border-green-100">
+                                <p class="text-sm text-green-800"><i class="fa fa-line-chart mr-1"></i> Weekday flow is about 1.5-1.8 times weekend flow</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bg-primary/5 rounded-lg p-5 mb-8 border border-primary/20">
+                    <h3 class="font-semibold mb-3 text-primary">Fermi Thinking Reflection</h3>
+                    <div class="space-y-3 text-gray-700">
+                        <div>
+                            <p class="font-medium">Strengths of your model:</p>
+                            <p id="modelStrengths" class="pl-4 text-sm">--</p>
+                        </div>
+                        <div>
+                            <p class="font-medium">Areas for improvement:</p>
+                            <p id="modelImprovements" class="pl-4 text-sm">--</p>
+                        </div>
+                        <div>
+                            <p class="font-medium">Problem decomposition evaluation:</p>
+                            <p id="decompositionFeedback" class="pl-4 text-sm">--</p>
+                        </div>
+                        <div>
+                            <p class="font-medium">Key finding:</p>
+                            <p id="keyFindings" class="pl-4 text-sm">In passenger flow estimation, [to be analyzed] is the most critical factor</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bg-blue-50 rounded-lg p-5 mb-8">
+                    <h3 class="font-semibold mb-3 text-primary">Your Achievements</h3>
+                    <div id="achievements" class="flex flex-wrap">
+                        <!-- Achievement badges will be dynamically generated -->
+                    </div>
+                </div>
+                
+                <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                    <button id="shareBtn" class="bg-gray-200 hover:bg-gray-300 text-dark font-bold py-3 px-6 rounded-lg transition-all">
+                        <i class="fa fa-share-alt mr-2"></i> Share Results
+                    </button>
+                    <button id="restartBtn" class="bg-primary hover:bg-primary/90 text-white font-bold py-3 px-8 rounded-lg transition-all">
+                        Restart Challenge <i class="fa fa-refresh ml-2"></i>
+                    </button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-dark text-white py-6 mt-10">
+        <div class="container mx-auto px-4">
+            <div class="text-center">
+                <h3 class="text-lg font-bold mb-2">Fermi Explorer | Educational Game</h3>
+                <p class="text-gray-400 text-sm">Designed to cultivate estimation thinking and problem decomposition skills</p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- JavaScript -->
+    <script>
+        // Game state management
+        const gameState = {
+            currentStage: 0,
+            totalStages: 6,
+            selectedQuestions: [], // Store selected question IDs
+            customQuestions: "",   // Store custom questions
+            relevantFactors: [],   // Factors automatically associated with questions
+            selectedFactors: [],   // User-selected factors
+            assumptions: {},
+            assumptionReasons: "",
+            calculationSteps: [],
+            score: 0,
+            achievements: [],
+            result: 0 // Final estimation result
+        };
+        
+        // Chart objects storage
+        const charts = {};
+        
+        // Game data - relationships between questions and factors
+        const gameData = {
+            // Question bank and corresponding factors mapping
+            questions: {
+                // Population & demand related questions
+                population_total: {
+                    text: "What is the permanent and floating population of Shenzhen?",
+                    factors: ["population"],
+                    explanation: "City population size directly determines the potential metro user base."
+                },
+                population_structure: {
+                    text: "What is the age and occupational structure of Shenzhen's population?",
+                    factors: ["population"],
+                    explanation: "Different groups have significantly different travel needs and patterns."
+                },
+                residential_distribution: {
+                    text: "How is the residential population distributed in Shenzhen?",
+                    factors: ["distribution"],
+                    explanation: "Spatial match between residential areas and metro lines affects accessibility."
+                },
+                employment_distribution: {
+                    text: "How are employment areas distributed in Shenzhen?",
+                    factors: ["distribution"],
+                    explanation: "Employment centers are main sources of commuting passengers."
+                },
+                transit_ratio: {
+                    text: "What percentage of people use public transportation?",
+                    factors: ["alternatives"],
+                    explanation: "Reflects the share of public transport in overall travel modes."
+                },
+                
+                // Metro system related questions
+                subway_lines: {
+                    text: "How many operational metro lines and stations are there in Shenzhen?",
+                    factors: ["lines"],
+                    explanation: "Line network coverage determines service capacity and accessibility."
+                },
+                operating_hours: {
+                    text: "How long does the metro operate daily?",
+                    factors: ["hours"],
+                    explanation: "Operating hours directly affect daily passenger flow limit."
+                },
+                train_frequency: {
+                    text: "What is the train frequency (peak/off-peak)?",
+                    factors: ["frequency"],
+                    explanation: "Train frequency determines capacity per unit time."
+                },
+                peak_hours: {
+                    text: "How long do morning and evening peak hours last?",
+                    factors: ["peak"],
+                    explanation: "Peak hours have the highest passenger flow."
+                },
+                carriage_capacity: {
+                    text: "How many carriages per train? What's the capacity per carriage?",
+                    factors: ["capacity"],
+                    explanation: "Determines the maximum number of passengers per train."
+                },
+                transfer_stations: {
+                    text: "How many transfer stations? What percentage of passengers transfer?",
+                    factors: ["transfer"],
+                    explanation: "Transfer passengers are counted multiple times and need adjustment."
+                },
+                coverage_area: {
+                    text: "What percentage of the city area does Shenzhen Metro cover?",
+                    factors: ["coverage"],
+                    explanation: "Coverage directly affects accessibility and attractiveness."
+                },
+                average_distance: {
+                    text: "What is the average travel distance per passenger?",
+                    factors: ["distance"],
+                    explanation: "Affects train turnover efficiency and daily passenger capacity."
+                },
+                station_density: {
+                    text: "What is the average density of metro stations?",
+                    factors: ["density"],
+                    explanation: "Station density affects walking accessibility."
+                },
+                
+                // Travel behavior related questions
+                weekday_vs_weekend: {
+                    text: "How different is passenger flow between weekdays and weekends?",
+                    factors: ["temporal"],
+                    explanation: "Weekday commuting and weekend leisure flows differ significantly."
+                },
+                daily_variation: {
+                    text: "What are the passenger flow patterns on different days?",
+                    factors: ["temporal"],
+                    explanation: "Monday-Friday patterns differ from holidays."
+                },
+                purpose_distribution: {
+                    text: "What is the distribution of travel purposes?",
+                    factors: ["purpose"],
+                    explanation: "Different purposes have significant time and frequency differences."
+                },
+                fare_impact: {
+                    text: "How do fare policies affect passenger flow?",
+                    factors: ["fare"],
+                    explanation: "Fare levels and discount policies affect choice preference."
+                },
+                
+                // Alternative transportation
+                bus_connection: {
+                    text: "What is the bus-metro transfer ratio?",
+                    factors: ["connection"],
+                    explanation: "Transfer convenience affects metro attractiveness."
+                },
+                private_car: {
+                    text: "How many private cars in Shenzhen? What's their usage?",
+                    factors: ["alternatives"],
+                    explanation: "Private cars are a main competitor to metro."
+                },
+                ride_hailing: {
+                    text: "How do ride-hailing services affect metro passenger flow?",
+                    factors: ["alternatives"],
+                    explanation: "Ride-hailing is an important alternative for short trips."
+                }
+            },
+            
+            // Factor details
+            factors: {
+                population: {
+                    name: "City Population Size & Structure",
+                    data: "Shenzhen has about 17.68M permanent residents (2023 data), with about 3M floating population. Working-age population (15-64) accounts for about 85%.",
+                    assumptions: [
+                        {id: "pop_active_ratio", question: "Percentage of population with daily travel needs?", min: 60, max: 90, unit: "%", impact: "High"},
+                        {id: "transit_usage_ratio", question: "Percentage using public transport?", min: 20, max: 50, unit: "%", impact: "High"},
+                        {id: "subway_choice_ratio", question: "Percentage choosing metro among public transport users?", min: 30, max: 70, unit: "%", impact: "High"}
+                    ],
+                    calculations: [
+                        {id: "potential_users", name: "Potential Metro Users", formula: "Total population × Travel need ratio × Public transport ratio × Metro choice ratio", 
+                         description: "Estimate population size likely to use metro", icon: "users"}
+                    ]
+                },
+                distribution: {
+                    name: "Population & Employment Distribution",
+                    data: "Population and employment in Shenzhen are mainly concentrated in Futian, Nanshan, Luohu, and Bao'an central areas.",
+                    assumptions: [
+                        {id: "coverage_ratio", question: "Percentage living within 1km of metro stations?", min: 30, max: 60, unit: "%", impact: "Medium"},
+                        {id: "job_coverage_ratio", question: "Percentage of jobs located within 1km of metro stations?", min: 40, max: 70, unit: "%", impact: "Medium"}
+                    ],
+                    calculations: [
+                        {id: "accessible_population", name: "Metro Accessible Population", formula: "Potential users × Residential coverage × Job coverage", 
+                         description: "Effective users considering spatial accessibility", icon: "map-marker"}
+                    ]
+                },
+                lines: {
+                    name: "Metro Lines & Stations",
+                    data: "As of 2023, Shenzhen Metro has 17 operational lines, 435 stations, and about 622km of operating mileage.",
+                    assumptions: [
+                        {id: "line_usage_factor", question: "Line usage difference coefficient (main lines/branch lines)", min: 0.5, max: 1.8, step: 0.1, impact: "Medium"}
+                    ],
+                    calculations: [
+                        {id: "network_contribution", name: "Network Contribution", formula: "Number of lines × Average per line passenger flow × Usage coefficient", 
+                         description: "Considering passenger flow differences between lines", icon: "subway"}
+                    ]
+                },
+                hours: {
+                    name: "Daily Operating Hours",
+                    data: "Shenzhen Metro operates from about 5:30 to 23:30 daily, averaging 18 hours.",
+                    assumptions: [
+                        {id: "effective_hour_ratio", question: "Percentage of effective passenger-carrying time?", min: 80, max: 100, unit: "%", impact: "Low"}
+                    ],
+                    calculations: [
+                        {id: "daily_operating_hours", name: "Effective Operating Hours", formula: "18 hours × Effective time ratio", 
+                         description: "Actual effective passenger-carrying time", icon: "clock-o"}
+                    ]
+                },
+                frequency: {
+                    name: "Train Frequency",
+                    data: "Peak hours (7:30-9:30, 17:30-19:30) have trains every 2-3 minutes, off-peak every 5-8 minutes.",
+                    assumptions: [
+                        {id: "peak_headway", question: "Average train interval during peak hours (minutes)", min: 2, max: 5, step: 0.5, impact: "High"},
+                        {id: "offpeak_headway", question: "Average train interval during off-peak hours (minutes)", min: 5, max: 10, step: 0.5, impact: "Medium"}
+                    ],
+                    calculations: [
+                        {id: "daily_train_count", name: "Daily Train Trips", formula: "Peak trips + Off-peak trips", 
+                         description: "Calculate total daily train departures for all lines", icon: "refresh"}
+                    ]
+                },
+                capacity: {
+                    name: "Train Capacity",
+                    data: "Shenzhen Metro trains typically have 6-8 carriages, with each carriage accommodating about 200 passengers (seated + standing), up to 300 when crowded.",
+                    assumptions: [
+                        {id: "carriage_count", question: "Average number of carriages per train", min: 6, max: 8, step: 1, impact: "Medium"},
+                        {id: "per_car_capacity", question: "Average passengers per carriage", min: 150, max: 300, step: 10, impact: "High"}
+                    ],
+                    calculations: [
+                        {id: "train_capacity", name: "Passengers per Train", formula: "Number of carriages × Passengers per carriage", 
+                         description: "Calculate total passenger capacity per train", icon: "cog"}
+                    ]
+                },
+                peak: {
+                    name: "Peak Hour Characteristics",
+                    data: "Morning and evening peak hours (about 4 hours total) account for 40%-60% of daily passenger flow.",
+                    assumptions: [
+                        {id: "peak_duration", question: "Total daily peak hours", min: 3, max: 5, step: 0.5, impact: "Medium"},
+                        {id: "peak_volume_ratio", question: "Peak hours passenger flow percentage", min: 40, max: 70, unit: "%", impact: "High"},
+                        {id: "peak_loading", question: "Train loading rate during peak hours", min: 80, max: 120, unit: "%", impact: "High"}
+                    ],
+                    calculations: [
+                        {id: "peak_contribution", name: "Peak Hour Flow", formula: "Peak trips × Per train capacity × Loading rate", 
+                         description: "Calculate peak hours passenger flow contribution", icon: "line-chart"}
+                    ]
+                },
+                transfer: {
+                    name: "Transfer Characteristics",
+                    data: "About 30% of metro passengers need to transfer once or more, with transfer stations being key passenger hubs.",
+                    assumptions: [
+                        {id: "transfer_rate", question: "Percentage of passengers transferring", min: 20, max: 50, unit: "%", impact: "Medium"},
+                        {id: "avg_transfers", question: "Average number of transfers per transferring passenger", min: 1, max: 2, step: 0.2, impact: "Low"}
+                    ],
+                    calculations: [
+                        {id: "transfer_adjustment", name: "Transfer Adjustment Factor", formula: "1 ÷ (1 + Transfer rate × Average transfers/100)", 
+                         description: "Deduct duplicate counting from transfers", icon: "exchange"}
+                    ]
+                },
+                coverage: {
+                    name: "Spatial Coverage",
+                    data: "Shenzhen Metro covers about 50% of the built-up area, mainly in the original SEZ and Bao'an central area.",
+                    assumptions: [
+                        {id: "coverage_effect", question: "Coverage impact coefficient on usage rate", min: 0.6, max: 1.0, step: 0.1, impact: "Medium"}
+                    ],
+                    calculations: [
+                        {id: "coverage_factor", name: "Coverage Adjustment", formula: "Potential users × Coverage impact coefficient", 
+                         description: "Consider insufficient metro spatial coverage", icon: "map"}
+                    ]
+                },
+                distance: {
+                    name: "Average Travel Distance",
+                    data: "Shenzhen Metro passengers travel about 15km on average, taking about 30 minutes per trip.",
+                    assumptions: [
+                        {id: "avg_trip_time", question: "Average one-way travel time (minutes)", min: 20, max: 40, step: 5, impact: "Low"}
+                    ],
+                    calculations: [
+                        {id: "train_turnover", name: "Train Turnover Efficiency", formula: "60 minutes ÷ Average trip time × 2 (round trip)", 
+                         description: "Calculate round trips a train can complete daily", icon: "train"}
+                    ]
+                },
+                density: {
+                    name: "Station Density",
+                    data: "Average station spacing is about 1.3km, smaller in the original SEZ, larger outside.",
+                    assumptions: [
+                        {id: "walk_access_ratio", question: "Percentage of passengers within walking distance to stations", min: 60, max: 90, unit: "%", impact: "Medium"}
+                    ],
+                    calculations: [
+                        {id: "accessible_users", name: "Walkable Users", formula: "Potential users × Walkable percentage", 
+                         description: "Consider station density impact on walking accessibility", icon: "walking"}
+                    ]
+                },
+                temporal: {
+                    name: "Time Distribution Characteristics",
+                    data: "Weekday morning peak: 7:30-9:30, evening peak: 17:30-19:30. Weekend flows are more evenly distributed.",
+                    assumptions: [
+                        {id: "weekend_factor", question: "Weekend passenger flow as percentage of weekday", min: 50, max: 80, unit: "%", impact: "Medium"},
+                        {id: "offpeak_ratio", question: "Off-peak passenger flow percentage", min: 30, max: 50, unit: "%", impact: "Medium"}
+                    ],
+                    calculations: [
+                        {id: "temporal_distribution", name: "Time Distribution Adjustment", formula: "Peak flow + Off-peak flow + Low flow", 
+                         description: "Combine passenger flow from different periods", icon: "bar-chart"}
+                    ]
+                },
+                purpose: {
+                    name: "Travel Purpose Composition",
+                    data: "Shenzhen Metro passenger flow: commute about 60%, shopping/leisure about 30%, others about 10%.",
+                    assumptions: [
+                        {id: "commute_ratio", question: "Commute travel percentage", min: 50, max: 70, unit: "%", impact: "Medium"},
+                        {id: "shopping_ratio", question: "Shopping/leisure travel percentage", min: 20, max: 40, unit: "%", impact: "Low"}
+                    ],
+                    calculations: [
+                        {id: "purpose_mix", name: "Purpose Mix", formula: "Commute flow + Shopping flow + Other flow", 
+                         description: "Combine passenger flow from different purposes", icon: "briefcase"}
+                    ]
+                },
+                fare: {
+                    name: "Fare Impact",
+                    data: "Shenzhen Metro fares are distance-based, starting at 2 yuan, average about 5 yuan.",
+                    assumptions: [
+                        {id: "fare_sensitivity", question: "Fare impact coefficient on choice rate", min: 0.8, max: 1.0, step: 0.05, impact: "Low"}
+                    ],
+                    calculations: [
+                        {id: "fare_adjustment", name: "Fare Adjustment", formula: "Potential flow × Fare sensitivity coefficient", 
+                         description: "Consider fare impact on passenger flow", icon: "ticket"}
+                    ]
+                },
+                connection: {
+                    name: "Bus Connection",
+                    data: "About 30% of metro passengers arrive via bus transfers, with integrated bus-metro discounts available.",
+                    assumptions: [
+                        {id: "connection_ratio", question: "Percentage arriving via bus transfer", min: 20, max: 40, unit: "%", impact: "Low"}
+                    ],
+                    calculations: [
+                        {id: "connection_contribution", name: "Transfer Passenger Contribution", formula: "Total flow × Transfer percentage", 
+                         description: "Calculate passenger flow from bus transfers", icon: "bus"}
+                    ]
+                },
+                alternatives: {
+                    name: "Alternative Transportation",
+                    data: "Shenzhen has a developed bus system (about 1,600 routes), about 2M private cars, and numerous taxis/ride-hailing vehicles.",
+                    assumptions: [
+                        {id: "private_car_impact", question: "Percentage diverted by private cars", min: 20, max: 50, unit: "%", impact: "Medium"},
+                        {id: "ride_hailing_impact", question: "Percentage diverted by ride-hailing", min: 5, max: 20, unit: "%", impact: "Low"}
+                    ],
+                    calculations: [
+                        {id: "alternative_adjustment", name: "Alternative Transportation Adjustment", formula: "Potential flow × (1 - Total diversion percentage/100)", 
+                         description: "Consider competition from other transportation", icon: "car"}
+                    ]
+                }
+            }
+        };
+        
+        // DOM elements
+        const stages = [
+            document.getElementById('startStage'),
+            document.getElementById('decomposeStage'),
+            document.getElementById('factorsStage'),
+            document.getElementById('dataStage'),
+            document.getElementById('assumptionsStage'),
+            document.getElementById('calculationStage'),
+            document.getElementById('resultStage')
+        ];
+        const progressFill = document.getElementById('progressFill');
+        const scoreDisplay = document.getElementById('score');
+        const startBtn = document.getElementById('startBtn');
+        const tutorialBtn = document.getElementById('tutorialBtn');
+        const tutorialModal = document.getElementById('tutorialModal');
+        const closeTutorial = document.getElementById('closeTutorial');
+        const startFromTutorial = document.getElementById('startFromTutorial');
+        const decomposeNextBtn = document.getElementById('decomposeNextBtn');
+        const decomposeBackBtn = document.getElementById('decomposeBackBtn');
+        const factorsNextBtn = document.getElementById('factorsNextBtn');
+        const factorsBackBtn = document.getElementById('factorsBackBtn');
+        const dataNextBtn = document.getElementById('dataNextBtn');
+        const dataBackBtn = document.getElementById('dataBackBtn');
+        const assumptionsNextBtn = document.getElementById('assumptionsNextBtn');
+        const assumptionsBackBtn = document.getElementById('assumptionsBackBtn');
+        const calculateBtn = document.getElementById('calculateBtn');
+        const calculationBackBtn = document.getElementById('calculationBackBtn');
+        const restartBtn = document.getElementById('restartBtn');
+        const shareBtn = document.getElementById('shareBtn');
+        const questionCards = document.querySelectorAll('.question-card');
+        const questionCount = document.getElementById('questionCount');
+        const customQuestions = document.getElementById('customQuestions');
+        const relevantFactorsContainer = document.getElementById('relevantFactors');
+        const factorCount = document.getElementById('factorCount');
+        const selectedDataContainer = document.getElementById('selectedData');
+        const assumptionsForm = document.getElementById('assumptionsForm');
+        const assumptionReasons = document.getElementById('assumptionReasons');
+        const calculationBuilder = document.getElementById('calculationBuilder');
+        const customSteps = document.getElementById('customSteps');
+        const availableSteps = document.getElementById('availableSteps');
+        const builderPlaceholder = document.getElementById('builderPlaceholder');
+        const formulaDisplay = document.getElementById('formulaDisplay');
+        const errorAnalysis = document.getElementById('errorAnalysis');
+        const errorAnalysisText = document.getElementById('errorAnalysisText');
+        
+        // Initialize game
+        function initGame() {
+            // Initialize charts
+            initCharts();
+            
+            // Bind start button event
+            startBtn.addEventListener('click', function() {
+                goToStage(1);
+            });
+            
+            // Tutorial related events
+            tutorialBtn.addEventListener('click', () => {
+                tutorialModal.classList.remove('hidden');
+            });
+            
+            closeTutorial.addEventListener('click', () => {
+                tutorialModal.classList.add('hidden');
+            });
+            
+            startFromTutorial.addEventListener('click', () => {
+                tutorialModal.classList.add('hidden');
+                goToStage(1);
+            });
+            
+            // Close modal when clicking outside
+            tutorialModal.addEventListener('click', (e) => {
+                if (e.target === tutorialModal) {
+                    tutorialModal.classList.add('hidden');
+                }
+            });
+            
+            // Question decomposition stage - question selection
+            questionCards.forEach(card => {
+                const checkbox = card.querySelector('input[type="checkbox"]');
+                checkbox.addEventListener('change', () => {
+                    handleQuestionSelection(card, checkbox);
+                });
+            });
+            
+            // Question decomposition stage - custom question input
+            customQuestions.addEventListener('input', () => {
+                gameState.customQuestions = customQuestions.value.trim();
+                saveGameState();
+            });
+            
+            // Question decomposition stage - next
+            decomposeNextBtn.addEventListener('click', () => {
+                prepareRelevantFactors();
+                goToStage(2);
+            });
+            
+            // Question decomposition stage - back
+            decomposeBackBtn.addEventListener('click', () => {
+                goToStage(0);
+            });
+            
+            // Factors selection stage - next
+            factorsNextBtn.addEventListener('click', () => {
+                prepareDataDisplay();
+                goToStage(3);
+            });
+            
+            // Factors selection stage - back
+            factorsBackBtn.addEventListener('click', () => {
+                goToStage(1);
+            });
+            
+            // Data view stage - next
+            dataNextBtn.addEventListener('click', () => {
+                prepareAssumptionsForm();
+                goToStage(4);
+            });
+            
+            // Data view stage - back
+            dataBackBtn.addEventListener('click', () => {
+                goToStage(2);
+            });
+            
+            // Assumptions stage - record reasons
+            assumptionReasons.addEventListener('input', () => {
+                gameState.assumptionReasons = assumptionReasons.value.trim();
+                saveGameState();
+            });
+            
+            // Assumptions stage - next
+            assumptionsNextBtn.addEventListener('click', () => {
+                collectAssumptions();
+                prepareCalculationModules();
+                goToStage(5);
+            });
+            
+            // Assumptions stage - back
+            assumptionsBackBtn.addEventListener('click', () => {
+                goToStage(3);
+            });
+            
+            // Calculation model stage - calculate result
+            calculateBtn.addEventListener('click', () => {
+                calculateResult();
+                updateResultChart();
+                goToStage(6);
+            });
+            
+            // Calculation model stage - back
+            calculationBackBtn.addEventListener('click', () => {
+                goToStage(4);
+            });
+            
+            // Restart game
+            restartBtn.addEventListener('click', resetGame);
+            
+            // Share results
+            shareBtn.addEventListener('click', shareResults);
+            
+            // Try to load game state from local storage
+            loadGameState();
+        }
+        
+        // Handle question selection
+        function handleQuestionSelection(card, checkbox) {
+            // Maximum 8 questions
+            if (checkbox.checked) {
+                if (gameState.selectedQuestions.length >= 8) {
+                    checkbox.checked = false;
+                    return; // Don't allow more selections
+                }
+                card.classList.add('selected');
+                gameState.selectedQuestions.push(card.dataset.question);
+            } else {
+                card.classList.remove('selected');
+                gameState.selectedQuestions = gameState.selectedQuestions.filter(id => id !== card.dataset.question);
+            }
+            
+            // Update count display
+            questionCount.textContent = `Selected: ${gameState.selectedQuestions.length}/8`;
+            
+            // Enable/disable next button
+            decomposeNextBtn.disabled = gameState.selectedQuestions.length < 8;
+            
+            // Manage question card states
+            updateQuestionCardsState();
+            
+            // Save game state
+            saveGameState();
+        }
+        
+        // Update question cards state
+        function updateQuestionCardsState() {
+            questionCards.forEach(card => {
+                const checkbox = card.querySelector('input[type="checkbox"]');
+                // If not selected and 8 already selected, disable
+                if (!checkbox.checked && gameState.selectedQuestions.length >= 8) {
+                    card.classList.add('disabled');
+                    checkbox.disabled = true;
+                } else {
+                    card.classList.remove('disabled');
+                    checkbox.disabled = false;
+                }
+            });
+        }
+        
+        // Initialize charts
+        function initCharts() {
+            // Passenger flow trend chart
+            const trendCtx = document.getElementById('ridershipTrend').getContext('2d');
+            charts.ridershipTrend = new Chart(trendCtx, {
+                type: 'line',
+                data: {
+                    labels: ['2018', '2019', '2020', '2021', '2022', '2023'],
+                    datasets: [{
+                        label: 'Daily Passenger Flow (10k)',
+                        data: [105, 128, 110, 164, 186, 220],
+                        borderColor: '#165DFF',
+                        backgroundColor: 'rgba(22, 93, 255, 0.1)',
+                        tension: 0.3,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '0k';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // Metro development chart
+            const metroCtx = document.getElementById('metroDevelopment').getContext('2d');
+            charts.metroDevelopment = new Chart(metroCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['2018', '2019', '2020', '2021', '2022', '2023'],
+                    datasets: [
+                        {
+                            label: 'Operational Lines',
+                            data: [8, 10, 11, 14, 16, 17],
+                            backgroundColor: '#165DFF'
+                        },
+                        {
+                            label: 'Operational Mileage (km)',
+                            data: [297, 383, 411, 491, 578, 622],
+                            backgroundColor: '#00B42A'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            stacked: false
+                        },
+                        y: {
+                            stacked: false
+                        }
+                    }
+                }
+            });
+            
+            // Result comparison chart (initially empty)
+            const resultCtx = document.getElementById('resultComparison').getContext('2d');
+            charts.resultComparison = new Chart(resultCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['Your Estimate', 'Actual Lower Bound', 'Actual Upper Bound'],
+                    datasets: [{
+                        label: 'Daily Passenger Flow (10k)',
+                        data: [0, 210, 230],
+                        backgroundColor: [
+                            '#165DFF',
+                            '#00B42A',
+                            '#00B42A'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '0k';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Update result comparison chart
+        function updateResultChart() {
+            const millions = gameState.result / 10000;
+            charts.resultComparison.data.datasets[0].data[0] = millions;
+            charts.resultComparison.update();
+        }
+        
+        // Prepare relevant factors (based on selected questions)
+        function prepareRelevantFactors() {
+            relevantFactorsContainer.innerHTML = '';
+            const factorSet = new Set();
+            
+            // Collect all relevant factors
+            gameState.selectedQuestions.forEach(questionId => {
+                const question = gameData.questions[questionId];
+                question.factors.forEach(factorId => {
+                    factorSet.add(factorId);
+                });
+            });
+            
+            // Convert to array and save
+            gameState.relevantFactors = Array.from(factorSet);
+            
+            // Display relevant factors
+            gameState.relevantFactors.forEach(factorId => {
+                const factor = gameData.factors[factorId];
+                
+                const factorCard = document.createElement('div');
+                factorCard.className = 'factor-card';
+                factorCard.dataset.factor = factorId;
+                factorCard.innerHTML = `
+                    <div class="flex items-start">
+                        <div class="bg-blue-100 p-2 rounded-full mr-3">
+                            <i class="fa fa-${getFactorIcon(factorId)} text-primary"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-semibold mb-1">${factor.name}</h3>
+                            <p class="text-sm text-gray-600">${getFactorDescription(factorId)}</p>
+                            <p class="text-xs text-gray-500 mt-1">Related Questions: ${getRelatedQuestionsText(factorId)}</p>
+                        </div>
+                    </div>
+                `;
+                
+                // Add click event
+                factorCard.addEventListener('click', () => {
+                    toggleFactorSelection(factorCard);
+                });
+                
+                relevantFactorsContainer.appendChild(factorCard);
+            });
+            
+            // Initialize selected factors
+            gameState.selectedFactors = [];
+            factorCount.textContent = `Selected: 0/${gameState.relevantFactors.length}`;
+            
+            // Save game state
+            saveGameState();
+        }
+        
+        // Get factor icon
+        function getFactorIcon(factorId) {
+            const icons = {
+                population: "users",
+                distribution: "map-marker",
+                lines: "subway",
+                hours: "clock-o",
+                frequency: "refresh",
+                capacity: "cog",
+                peak: "line-chart",
+                transfer: "exchange",
+                coverage: "map",
+                distance: "train",
+                density: "walking",
+                temporal: "bar-chart",
+                purpose: "briefcase",
+                fare: "ticket",
+                connection: "bus",
+                alternatives: "car"
+            };
+            return icons[factorId] || "question-circle";
+        }
+        
+        // Get factor description
+        function getFactorDescription(factorId) {
+            const descriptions = {
+                population: "Affects potential metro user base size and structure",
+                distribution: "Reflects spatial distribution of population and jobs",
+                lines: "Reflects metro network coverage and service capacity",
+                hours: "Determines total daily operating time",
+                frequency: "Affects number of train trips per unit time",
+                capacity: "Determines passenger capacity per train",
+                peak: "Reflects passenger flow distribution throughout the day",
+                transfer: "Affects accuracy of passenger flow counting",
+                coverage: "Represents spatial coverage of metro network",
+                distance: "Reflects average travel distance and train efficiency",
+                density: "Affects walking accessibility and convenience",
+                temporal: "Describes time distribution patterns",
+                purpose: "Reflects composition of travel purposes",
+                fare: "Represents fare level impact on passenger flow",
+                connection: "Reflects bus-metro transfer situation",
+                alternatives: "Reflects competition from other transport"
+            };
+            return descriptions[factorId] || "Important factor affecting metro passenger flow";
+        }
+        
+        // Get related questions text
+        function getRelatedQuestionsText(factorId) {
+            const relatedQuestions = [];
+            
+            for (const questionId in gameData.questions) {
+                if (gameData.questions[questionId].factors.includes(factorId)) {
+                    relatedQuestions.push(gameData.questions[questionId].text.substring(0, 20) + "...");
+                }
+            }
+            
+            return relatedQuestions.join(", ");
+        }
+        
+        // Toggle factor selection
+        function toggleFactorSelection(card) {
+            const factorId = card.dataset.factor;
+            
+            // Toggle selection state
+            card.classList.toggle('selected');
+            
+            // Update selected factors list
+            if (card.classList.contains('selected')) {
+                if (!gameState.selectedFactors.includes(factorId)) {
+                    gameState.selectedFactors.push(factorId);
+                }
+            } else {
+                gameState.selectedFactors = gameState.selectedFactors.filter(id => id !== factorId);
+            }
+            
+            // Update count display
+            factorCount.textContent = `Selected: ${gameState.selectedFactors.length}/${gameState.relevantFactors.length}`;
+            
+            // Enable/disable next button (at least 5 factors)
+            factorsNextBtn.disabled = gameState.selectedFactors.length < 5;
+            
+            // Save game state
+            saveGameState();
+        }
+        
+        // Prepare data display
+        function prepareDataDisplay() {
+            selectedDataContainer.innerHTML = '';
+            
+            gameState.selectedFactors.forEach(factorId => {
+                const factor = gameData.factors[factorId];
+                
+                const dataCard = document.createElement('div');
+                dataCard.className = 'border rounded-lg p-4 bg-gray-50';
+                dataCard.innerHTML = `
+                    <h3 class="font-semibold mb-2 text-primary">${factor.name}</h3>
+                    <p class="text-gray-700 text-sm">${factor.data}</p>
+                    <div class="mt-2 text-xs text-gray-500">
+                        <i class="fa fa-info-circle mr-1"></i> Data updated: Q4 2023
+                    </div>
+                `;
+                
+                selectedDataContainer.appendChild(dataCard);
+            });
+            
+            // Save game state
+            saveGameState();
+        }
+        
+        // Prepare assumptions form
+        function prepareAssumptionsForm() {
+            assumptionsForm.innerHTML = '';
+            
+            gameState.selectedFactors.forEach(factorId => {
+                const factor = gameData.factors[factorId];
+                
+                if (factor.assumptions.length > 0) {
+                    const factorSection = document.createElement('div');
+                    factorSection.className = 'mb-6';
+                    factorSection.innerHTML = `<h3 class="font-semibold mb-3 text-primary">${factor.name} Related Assumptions</h3>`;
+                    
+                    factor.assumptions.forEach(assumption => {
+                        const assumptionInput = document.createElement('div');
+                        assumptionInput.className = 'mb-4';
+                        
+                        const unit = assumption.unit || '';
+                        const step = assumption.step || 1;
+                        const impactLabel = `<span class="ml-2 px-1.5 py-0.5 text-xs rounded-full bg-${
+                            assumption.impact === 'High' ? 'red' : assumption.impact === 'Medium' ? 'orange' : 'blue'
+                        }-100 text-${
+                            assumption.impact === 'High' ? 'red' : assumption.impact === 'Medium' ? 'orange' : 'blue'
+                        }-800">${assumption.impact} Impact</span>`;
+                        
+                        // Try to load saved value
+                        const savedValue = gameState.assumptions[assumption.id] || (assumption.min + assumption.max) / 2;
+                        
+                        assumptionInput.innerHTML = `
+                            <label class="block text-gray-700 mb-1">${assumption.question} ${impactLabel}</label>
+                            <div class="flex items-center">
+                                <input type="number" id="assumption-${assumption.id}" 
+                                       min="${assumption.min}" max="${assumption.max}" step="${step}"
+                                       value="${savedValue}"
+                                       class="flex-grow px-3 py-2 border border-gray-300 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-primary">
+                                <span class="bg-gray-200 px-3 py-2 border border-l-0 border-gray-300 rounded-r-lg">${unit}</span>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-1">Reasonable range: ${assumption.min} - ${assumption.max}${unit}</p>
+                        `;
+                        
+                        // Add input change event to save in real-time
+                        const input = assumptionInput.querySelector(`#assumption-${assumption.id}`);
+                        input.addEventListener('change', () => {
+                            gameState.assumptions[assumption.id] = parseFloat(input.value);
+                            saveGameState();
+                        });
+                        
+                        factorSection.appendChild(assumptionInput);
+                    });
+                    
+                    assumptionsForm.appendChild(factorSection);
+                } else {
+                    const noAssumptionCard = document.createElement('div');
+                    noAssumptionCard.className = 'mb-6 p-4 bg-gray-50 rounded-lg';
+                    noAssumptionCard.innerHTML = `
+                        <h3 class="font-semibold mb-2 text-primary">${factor.name}</h3>
+                        <p class="text-gray-600 text-sm">This factor has clear data, no additional assumptions needed.</p>
+                    `;
+                    assumptionsForm.appendChild(noAssumptionCard);
+                }
+            });
+            
+            // Load saved assumption reasons
+            assumptionReasons.value = gameState.assumptionReasons || '';
+            
+            // Save game state
+            saveGameState();
+        }
+        
+        // Collect assumptions data
+        function collectAssumptions() {
+            gameState.selectedFactors.forEach(factorId => {
+                const factor = gameData.factors[factorId];
+                
+                factor.assumptions.forEach(assumption => {
+                    const input = document.getElementById(`assumption-${assumption.id}`);
+                    if (input) {
+                        gameState.assumptions[assumption.id] = parseFloat(input.value);
+                    }
+                });
+            });
+            
+            // Save game state
+            saveGameState();
+        }
+        
+        // Prepare calculation modules
+        function prepareCalculationModules() {
+            availableSteps.innerHTML = '';
+            customSteps.innerHTML = '';
+            
+            // Use saved calculation steps if available
+            if (gameState.calculationSteps.length === 0) {
+                gameState.calculationSteps = [];
+            }
+            
+            updateFormulaDisplay();
+            calculateBtn.disabled = true;
+            
+            // Show placeholder if no steps
+            builderPlaceholder.style.display = gameState.calculationSteps.length === 0 ? 'block' : 'none';
+            
+            gameState.selectedFactors.forEach(factorId => {
+                const factor = gameData.factors[factorId];
+                
+                factor.calculations.forEach(calculation => {
+                    const stepCard = document.createElement('div');
+                    stepCard.className = 'border rounded-lg p-3 bg-gray-50 flex items-center card-hover';
+                    stepCard.dataset.stepId = calculation.id;
+                    stepCard.innerHTML = `
+                        <div class="mr-3 text-primary">
+                            <i class="fa fa-${calculation.icon}"></i>
+                        </div>
+                        <div class="flex-grow">
+                            <h4 class="font-medium">${calculation.name}</h4>
+                            <p class="text-sm text-gray-600">${calculation.formula}</p>
+                        </div>
+                        <div class="text-gray-500 text-sm has-tooltip">
+                            <i class="fa fa-info-circle" title="${calculation.description}"></i>
+                            <span class="tooltip">${calculation.description}</span>
+                        </div>
+                    `;
+                    
+                    // Add click event
+                    stepCard.addEventListener('click', () => {
+                        addCalculationStep(calculation.id, calculation);
+                    });
+                    
+                    availableSteps.appendChild(stepCard);
+                });
+            });
+            
+            // Re-add saved calculation steps if any
+            if (gameState.calculationSteps.length > 0) {
+                gameState.calculationSteps.forEach(stepId => {
+                    // Find corresponding calculation
+                    let calculation;
+                    for (const factorId in gameData.factors) {
+                        const factor = gameData.factors[factorId];
+                        calculation = factor.calculations.find(c => c.id === stepId);
+                        if (calculation) break;
+                    }
+                    
+                    if (calculation) {
+                        const stepElement = document.createElement('div');
+                        stepElement.className = 'border rounded-lg p-3 bg-white flex items-center step-highlight';
+                        stepElement.dataset.stepId = stepId;
+                        stepElement.innerHTML = `
+                            <div class="mr-3 text-gray-400">
+                                <span class="step-number">${gameState.calculationSteps.indexOf(stepId) + 1}</span>
+                            </div>
+                            <div class="flex-grow">
+                                <h4 class="font-medium">${calculation.name}</h4>
+                                <p class="text-sm text-gray-600">${calculation.formula}</p>
+                            </div>
+                            <div class="text-gray-400 cursor-pointer hover:text-danger transition-colors">
+                                <i class="fa fa-times-circle remove-step"></i>
+                            </div>
+                        `;
+                        
+                        // Add delete event
+                        stepElement.querySelector('.remove-step').addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            removeCalculationStep(stepId, stepElement);
+                        });
+                        
+                        customSteps.appendChild(stepElement);
+                    }
+                });
+                
+                updateFormulaDisplay();
+                calculateBtn.disabled = false;
+            }
+            
+            // Save game state
+            saveGameState();
+        }
+        
+        // Add calculation step
+        function addCalculationStep(stepId, calculation) {
+            // Prevent duplicate steps
+            if (gameState.calculationSteps.includes(stepId)) {
+                return;
+            }
+            
+            // Hide placeholder
+            builderPlaceholder.style.display = 'none';
+            
+            // Add to calculation steps
+            gameState.calculationSteps.push(stepId);
+            
+            // Create step element
+            const stepElement = document.createElement('div');
+            stepElement.className = 'border rounded-lg p-3 bg-white flex items-center step-highlight';
+            stepElement.dataset.stepId = stepId;
+            stepElement.innerHTML = `
+                <div class="mr-3 text-gray-400">
+                    <span class="step-number">${gameState.calculationSteps.length}</span>
+                </div>
+                <div class="flex-grow">
+                    <h4 class="font-medium">${calculation.name}</h4>
+                    <p class="text-sm text-gray-600">${calculation.formula}</p>
+                </div>
+                <div class="text-gray-400 cursor-pointer hover:text-danger transition-colors">
+                    <i class="fa fa-times-circle remove-step"></i>
+                </div>
+            `;
+            
+            // Add delete event
+            stepElement.querySelector('.remove-step').addEventListener('click', (e) => {
+                e.stopPropagation();
+                removeCalculationStep(stepId, stepElement);
+            });
+            
+            customSteps.appendChild(stepElement);
+            
+            // Update formula display
+            updateFormulaDisplay();
+            
+            // Enable calculate button
+            calculateBtn.disabled = false;
+            
+            // Save game state
+            saveGameState();
+        }
+        
+        // Remove calculation step
+        function removeCalculationStep(stepId, element) {
+            // Remove from state
+            gameState.calculationSteps = gameState.calculationSteps.filter(id => id !== stepId);
+            
+            // Remove from DOM
+            element.remove();
+            
+            // Update step numbers
+            updateStepNumbers();
+            
+            // Show placeholder if no steps left
+            if (gameState.calculationSteps.length === 0) {
+                builderPlaceholder.style.display = 'block';
+                calculateBtn.disabled = true;
+            }
+            
+            // Update formula display
+            updateFormulaDisplay();
+            
+            // Save game state
+            saveGameState();
+        }
+        
+        // Update step numbers
+        function updateStepNumbers() {
+            const steps = customSteps.querySelectorAll('.step-highlight');
+            steps.forEach((step, index) => {
+                step.querySelector('.step-number').textContent = index + 1;
+            });
+        }
+        
+        // Update formula display
+        function updateFormulaDisplay() {
+            if (gameState.calculationSteps.length === 0) {
+                formulaDisplay.textContent = "Select calculation modules below to build your formula...";
+                return;
+            }
+            
+            let formulaText = "Passenger Flow = ";
+            
+            gameState.calculationSteps.forEach((stepId, index) => {
+                // Find corresponding calculation
+                let calculation;
+                for (const factorId in gameData.factors) {
+                    const factor = gameData.factors[factorId];
+                    calculation = factor.calculations.find(c => c.id === stepId);
+                    if (calculation) break;
+                }
+                
+                if (calculation) {
+                    formulaText += calculation.formula;
+                    if (index < gameState.calculationSteps.length - 1) {
+                        formulaText += " × ";
+                    }
+                }
+            });
+            
+            formulaDisplay.textContent = formulaText;
+        }
+        
+        // Calculate result
+        function calculateResult() {
+            // Base calculation
+            let result = 1;
+            let factorImpacts = {};
+            
+            // Population factor calculation
+            if (gameState.selectedFactors.includes('population')) {
+                const totalPopulation = 17680000 + 3000000; // Permanent + floating
+                const activeRatio = gameState.assumptions.pop_active_ratio / 100;
+                const transitRatio = gameState.assumptions.transit_usage_ratio / 100;
+                const subwayRatio = gameState.assumptions.subway_choice_ratio / 100;
+                
+                const populationImpact = totalPopulation * activeRatio * transitRatio * subwayRatio;
+                result *= populationImpact;
+                factorImpacts.population = {value: populationImpact, name: "City Population Size & Structure"};
+            }
+            
+            // Distribution factor calculation
+            if (gameState.selectedFactors.includes('distribution')) {
+                const coverageRatio = gameState.assumptions.coverage_ratio / 100;
+                const jobCoverageRatio = gameState.assumptions.job_coverage_ratio / 100;
+                
+                const distributionImpact = coverageRatio * jobCoverageRatio;
+                result *= distributionImpact;
+                factorImpacts.distribution = {value: distributionImpact, name: "Population & Employment Distribution"};
+            }
+            
+            // Lines factor calculation
+            if (gameState.selectedFactors.includes('lines')) {
+                const lineFactor = gameState.assumptions.line_usage_factor || 1;
+                const linesImpact = 17 * lineFactor; // 17 lines
+                
+                result *= linesImpact;
+                factorImpacts.lines = {value: linesImpact, name: "Metro Lines & Stations"};
+            }
+            
+            // Operating hours factor
+            if (gameState.selectedFactors.includes('hours')) {
+                const effectiveRatio = gameState.assumptions.effective_hour_ratio / 100;
+                const hoursImpact = 18 * effectiveRatio / 24; // Relative to full day
+                
+                result *= hoursImpact;
+                factorImpacts.hours = {value: hoursImpact, name: "Daily Operating Hours"};
+            }
+            
+            // Frequency factor
+            if (gameState.selectedFactors.includes('frequency')) {
+                // Peak hours (assume 4h) and off-peak (14h)
+                const peakTrainsPerHour = 60 / gameState.assumptions.peak_headway;
+                const offpeakTrainsPerHour = 60 / gameState.assumptions.offpeak_headway;
+                const totalLines = 17;
+                
+                // Calculate total daily trips
+                const peakTotal = 4 * peakTrainsPerHour * totalLines;
+                const offpeakTotal = 14 * offpeakTrainsPerHour * totalLines;
+                const frequencyImpact = (peakTotal + offpeakTotal) / 10000; // Scale down
+                
+                result *= frequencyImpact;
+                factorImpacts.frequency = {value: frequencyImpact, name: "Train Frequency"};
+            }
+            
+            // Capacity calculation
+            if (gameState.selectedFactors.includes('capacity')) {
+                const carriages = gameState.assumptions.carriage_count || 6;
+                const capacityPerCar = gameState.assumptions.per_car_capacity || 200;
+                
+                const capacityImpact = carriages * capacityPerCar / 1000; // Scale down
+                result *= capacityImpact;
+                factorImpacts.capacity = {value: capacityImpact, name: "Train Capacity"};
+            }
+            
+            // Peak factor adjustment
+            if (gameState.selectedFactors.includes('peak')) {
+                const peakRatio = gameState.assumptions.peak_volume_ratio / 100;
+                const peakLoading = gameState.assumptions.peak_loading / 100;
+                
+                const peakImpact = peakRatio * peakLoading;
+                result *= peakImpact;
+                factorImpacts.peak = {value: peakImpact, name: "Peak Hour Characteristics"};
+            }
+            
+            // Transfer factor adjustment
+            if (gameState.selectedFactors.includes('transfer')) {
+                const transferRate = gameState.assumptions.transfer_rate / 100;
+                const avgTransfers = gameState.assumptions.avg_transfers || 1;
+                
+                const transferImpact = 1 / (1 + transferRate * avgTransfers);
+                result *= transferImpact;
+                factorImpacts.transfer = {value: transferImpact, name: "Transfer Characteristics"};
+            }
+            
+            // Alternative transport adjustment
+            if (gameState.selectedFactors.includes('alternatives')) {
+                const privateCarImpact = gameState.assumptions.private_car_impact / 100;
+                const rideHailingImpact = gameState.assumptions.ride_hailing_impact / 100;
+                const totalImpact = privateCarImpact + rideHailingImpact;
+                
+                const alternativeImpact = 1 - totalImpact;
+                result *= alternativeImpact;
+                factorImpacts.alternatives = {value: alternativeImpact, name: "Alternative Transportation"};
+            }
+            
+            // Ensure result is within reasonable range
+            result = Math.max(500000, Math.min(5000000, Math.round(result)));
+            
+            // Save result
+            gameState.result = result;
+            
+            // Display result
+            document.getElementById('finalResult').textContent = new Intl.NumberFormat('en-US').format(result) + " passengers/day";
+            
+            // Evaluate model
+            evaluateModel(result, factorImpacts);
+            
+            // Save game state
+            saveGameState();
+        }
+        
+        // Evaluate model
+        function evaluateModel(estimate, factorImpacts) {
+            // Actual range: 2.1M - 2.3M
+            const actualMin = 2100000;
+            const actualMax = 2300000;
+            
+            // Calculate problem decomposition quality score
+            const keyQuestions = ["population_total", "transit_ratio", "train_frequency", "peak_hours", 
+                                 "carriage_capacity", "transfer_stations", "private_car", "residential_distribution"];
+            const selectedKeyQuestions = keyQuestions.filter(q => gameState.selectedQuestions.includes(q)).length;
+            const decompositionScore = 2 + (selectedKeyQuestions * 1); // Base 2, +1 per key question
+            
+            // Calculate model completeness score
+            const completeness = Math.min(10, gameState.selectedFactors.length * 0.83); // Max 12 factors
+            
+            // Calculate logical rationality score
+            let logicScore = 0;
+            if (estimate >= actualMin && estimate <= actualMax) {
+                logicScore = 10;
+            } else {
+                const lowerDiff = Math.abs(estimate - actualMin) / actualMin;
+                const upperDiff = Math.abs(estimate - actualMax) / actualMax;
+                const minDiff = Math.min(lowerDiff, upperDiff);
+                
+                logicScore = Math.max(0, 10 - (minDiff * 10));
+            }
+            
+            // Update score display
+            document.getElementById('completenessScore').textContent = `${completeness.toFixed(1)}/10`;
+            document.getElementById('completenessBar').style.width = `${completeness * 10}%`;
+            
+            document.getElementById('logicScore').textContent = `${logicScore.toFixed(1)}/10`;
+            document.getElementById('logicBar').style.width = `${logicScore * 10}%`;
+            
+            document.getElementById('decompositionScore').textContent = `${decompositionScore.toFixed(1)}/10`;
+            document.getElementById('decompositionBar').style.width = `${decompositionScore * 10}%`;
+            
+            // Calculate total score
+            gameState.score = Math.round((completeness + logicScore + decompositionScore) * 3.33);
+            scoreDisplay.textContent = gameState.score;
+            
+            // Find most impactful factor
+            let maxImpactFactor = null;
+            if (Object.keys(factorImpacts).length > 0) {
+                maxImpactFactor = Object.values(factorImpacts).reduce((max, item) => {
+                    return item.value > max.value ? item : max;
+                }, Object.values(factorImpacts)[0]);
+            }
+            
+            // Generate model analysis
+            let analysis = `
+                <p>You selected 8 decomposed questions, ${gameState.selectedFactors.length} influencing factors, and built a calculation model with ${gameState.calculationSteps.length} steps.</p>
+            `;
+            
+            // Result comparison analysis
+            let isResultError = false;
+            if (estimate >= actualMin && estimate <= actualMax) {
+                analysis += `<p class="text-accent"><i class="fa fa-check-circle mr-1"></i>Your estimate is within actual data range, very accurate!</p>`;
+                errorAnalysis.classList.add('hidden');
+            } else if (estimate < actualMin) {
+                isResultError = true;
+                const percent = Math.round((actualMin - estimate) / actualMin * 100);
+                analysis += `<p><i class="fa fa-info-circle mr-1"></i>Your estimate is about ${percent}% lower than actual data. You may have underestimated peak hour crowding or metro usage rate.</p>`;
+            } else {
+                isResultError = true;
+                const percent = Math.round((estimate - actualMax) / actualMax * 100);
+                analysis += `<p><i class="fa fa-info-circle mr-1"></i>Your estimate is about ${percent}% higher than actual data. You may not have accounted for transfer duplication or overestimated train loading rate.</p>`;
+            }
+            
+            // Factor selection analysis
+            const keyFactors = ["population", "frequency", "peak", "capacity", "transfer"];
+            const hasKeyFactors = keyFactors.filter(f => gameState.selectedFactors.includes(f)).length;
+            
+            if (hasKeyFactors >= 3) {
+                analysis += `<p><i class="fa fa-thumbs-up mr-1"></i>You selected multiple key influencing factors, a strength of your model.</p>`;
+            } else {
+                analysis += `<p><i class="fa fa-lightbulb-o mr-1"></i>Next time try including key factors like "City Population Size" and "Peak Hour Characteristics".</p>`;
+            }
+            
+            document.getElementById('modelAnalysis').innerHTML = analysis;
+            
+            // Show error analysis (when result inaccurate)
+            if (isResultError) {
+                let missingQuestions = [];
+                keyQuestions.forEach(q => {
+                    if (!gameState.selectedQuestions.includes(q)) {
+                        missingQuestions.push(gameData.questions[q].text);
+                    }
+                });
+                
+                if (missingQuestions.length > 0) {
+                    errorAnalysisText.innerHTML = `
+                        Your estimation deviation may be due to overlooking key questions:<br>
+                        - ${missingQuestions.slice(0, 3).join('<br>- ')}<br>
+                        These questions significantly impact passenger flow estimation. Including them next time can improve accuracy.
+                    `;
+                    errorAnalysis.classList.remove('hidden');
+                }
+            }
+            
+            // Generate Fermi thinking reflection
+            let strengths = "";
+            let improvements = "";
+            let decompositionFeedback = "";
+            
+            // Problem decomposition feedback
+            if (decompositionScore >= 8) {
+                decompositionFeedback = "Your problem decomposition is excellent, covering key dimensions needed for estimation.";
+            } else if (decompositionScore >= 6) {
+                decompositionFeedback = "Your problem decomposition is reasonable but could include more focus on peak hour characteristics.";
+            } else {
+                decompositionFeedback = "Your problem decomposition needs broadening. Next time include more about population size and train capacity.";
+                
+                // Specific feedback for missing selections
+                if (!gameState.selectedQuestions.includes("population_total")) {
+                    decompositionFeedback += " City population is fundamental to passenger flow estimation and shouldn't be omitted.";
+                }
+                if (!gameState.selectedQuestions.includes("train_frequency")) {
+                    decompositionFeedback += " Train frequency directly impacts capacity per unit time.";
+                }
+            }
+            
+            // Model strengths
+            if (completeness >= 8) {
+                strengths += "Your model considers multiple influencing factors with complete structure; ";
+            } else if (completeness >= 5) {
+                strengths += "Your model includes main influencing factors with reasonable framework; ";
+            } else {
+                strengths += "You successfully built a basic model structure; ";
+            }
+            
+            if (logicScore >= 8) {
+                strengths += "Your estimate closely matches actual data with reasonable assumptions.";
+            } else if (logicScore >= 5) {
+                strengths += "Your estimate is within reasonable range with correct overall approach.";
+            } else {
+                strengths += "Your problem decomposition approach is commendable.";
+            }
+            
+            // Improvement suggestions
+            if (gameState.calculationSteps.length < 4) {
+                improvements += "Add more calculation steps to refine the estimation process; ";
+            }
+            
+            if (hasKeyFactors < 3) {
+                improvements += "Include more key influencing factors; ";
+            }
+            
+            if (gameState.assumptionReasons.length < 20) {
+                improvements += "Next time document your assumption reasoning more thoroughly to improve thinking; ";
+            }
+            
+            if (improvements === "") {
+                improvements += "Try adjusting some assumption values to further improve estimation precision.";
+            }
+            
+            document.getElementById('modelStrengths').textContent = strengths;
+            document.getElementById('modelImprovements').textContent = improvements;
+            document.getElementById('decompositionFeedback').textContent = decompositionFeedback;
+            document.getElementById('keyFindings').textContent = 
+                `In passenger flow estimation, ${maxImpactFactor ? maxImpactFactor.name : "population size and train capacity"} is the most critical factor`;
+            
+            // Generate achievement badges
+            generateAchievements(completeness, logicScore, decompositionScore, hasKeyFactors);
+        }
+        
+        // Generate achievement badges
+        function generateAchievements(completeness, logicScore, decompositionScore, hasKeyFactors) {
+            const achievementsContainer = document.getElementById('achievements');
+            achievementsContainer.innerHTML = '';
+            
+            gameState.achievements = [];
+            
+            // Score-based achievements
+            if (gameState.score >= 90) {
+                addAchievement("Fermi Master", "Your estimation skills have reached master level!", "trophy");
+            } else if (gameState.score >= 70) {
+                addAchievement("Estimation Expert", "Demonstrated excellent estimation thinking", "star");
+            } else if (gameState.score >= 50) {
+                addAchievement("Explorer", "Mastered the fundamentals of Fermi estimation", "compass");
+            }
+            
+            // Problem decomposition achievements
+            if (decompositionScore >= 9) {
+                addAchievement("Problem Decomposition Master", "Perfectly decomposed complex problem", "puzzle-piece");
+            } else if (decompositionScore >= 7) {
+                addAchievement("Decomposition Pro", "Effectively decomposed the core problem", "puzzle-piece");
+            }
+            
+            // Factor selection achievements
+            if (gameState.selectedFactors.length >= 8) {
+                addAchievement("Detail Oriented", "Considered multiple influencing factors", "search");
+            }
+            
+            // Key factors achievements
+            if (hasKeyFactors >= 3) {
+                addAchievement("Focus on Essentials", "Accurately identified key influencing factors", "bullseye");
+            }
+            
+            // Estimation precision achievements
+            if (logicScore >= 9) {
+                addAchievement("Math Wizard", "Estimation result nearly perfect", "calculator");
+            }
+            
+            // Display all achievements
+            gameState.achievements.forEach(achievement => {
+                const badge = document.createElement('div');
+                badge.className = 'badge flex items-center has-tooltip';
+                badge.innerHTML = `
+                    <i class="fa fa-${achievement.icon} mr-1"></i> ${achievement.name}
+                    <span class="tooltip">${achievement.description}</span>
+                `;
+                achievementsContainer.appendChild(badge);
+            });
+        }
+        
+        // Add achievement
+        function addAchievement(name, description, icon) {
+            gameState.achievements.push({
+                name,
+                description,
+                icon
+            });
+        }
+        
+        // Go to specific game stage
+        function goToStage(stageIndex) {
+            // Hide all stages
+            stages.forEach(stage => stage.classList.add('hidden'));
+            
+            // Show current stage
+            stages[stageIndex].classList.remove('hidden');
+            
+            // Update current stage
+            gameState.currentStage = stageIndex;
+            
+            // Update progress bar
+            const progress = (stageIndex / gameState.totalStages) * 100;
+            progressFill.style.width = `${progress}%`;
+            
+            // Save game state
+            saveGameState();
+        }
+        
+        // Reset game
+        function resetGame() {
+            // Reset game state
+            gameState.selectedQuestions = [];
+            gameState.customQuestions = "";
+            gameState.relevantFactors = [];
+            gameState.selectedFactors = [];
+            gameState.assumptions = {};
+            gameState.assumptionReasons = "";
+            gameState.calculationSteps = [];
+            gameState.score = 0;
+            gameState.achievements = [];
+            gameState.result = 0;
+            
+            // Reset UI state
+            questionCards.forEach(card => {
+                card.classList.remove('selected', 'disabled');
+                const checkbox = card.querySelector('input[type="checkbox"]');
+                checkbox.checked = false;
+                checkbox.disabled = false;
+            });
+            
+            questionCount.textContent = "Selected: 0/8";
+            decomposeNextBtn.disabled = true;
+            customQuestions.value = "";
+            
+            // Reset progress and score
+            progressFill.style.width = "0%";
+            scoreDisplay.textContent = "0";
+            
+            // Go to start screen
+            goToStage(0);
+            
+            // Clear local storage
+            localStorage.removeItem('fermiGameState');
+        }
+        
+        // Share results
+        function shareResults() {
+            alert("Sharing feature activated! In a real application, this would show options to share to social media or copy a link.\n\nYour score: " + gameState.score);
+        }
+        
+        // Save game state to local storage
+        function saveGameState() {
+            localStorage.setItem('fermiGameState', JSON.stringify(gameState));
+        }
+        
+        // Load game state from local storage
+        function loadGameState() {
+            const savedState = localStorage.getItem('fermiGameState');
+            if (savedState) {
+                Object.assign(gameState, JSON.parse(savedState));
+                
+                // Update UI to reflect loaded state
+                if (gameState.currentStage > 0) {
+                    goToStage(gameState.currentStage);
+                }
+                
+                // Update score display
+                scoreDisplay.textContent = gameState.score;
+                
+                // If questions were selected, update selection state
+                if (gameState.selectedQuestions.length > 0) {
+                    gameState.selectedQuestions.forEach(questionId => {
+                        const card = document.querySelector(`.question-card[data-question="${questionId}"]`);
+                        if (card) {
+                            card.classList.add('selected');
+                            const checkbox = card.querySelector('input[type="checkbox"]');
+                            checkbox.checked = true;
+                        }
+                    });
+                    
+                    questionCount.textContent = `Selected: ${gameState.selectedQuestions.length}/8`;
+                    decomposeNextBtn.disabled = gameState.selectedQuestions.length < 8;
+                    updateQuestionCardsState();
+                }
+            }
+        }
+        
+        // Initialize game when page loads
+        document.addEventListener('DOMContentLoaded', initGame);
+    </script>
+</body>
+</html>
